@@ -266,7 +266,7 @@ class ClientClass {
         // const estado = castEstado(estadoHeader);
         // /^[a-zA-ZáéíóúÁÉÍÓU]+$/
         clientModel_1.default
-            .find({ nombre: regExpCrit }) // , { estado: estado } { $and: [{ nombre: { $regex: criterioNombre, $options: "i" } }] }
+            .find({ $or: [{ nombre: regExpCrit }, { telefono: regExpCrit }] }) // , { estado: estado } { $and: [{ nombre: { $regex: criterioNombre, $options: "i" } }] }
             .populate("sucursal")
             .exec((err, usuariosDB) => {
             if (err) {

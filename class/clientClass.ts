@@ -302,7 +302,7 @@ export class ClientClass {
     // /^[a-zA-ZáéíóúÁÉÍÓU]+$/
 
     clientModel
-      .find({ nombre: regExpCrit }) // , { estado: estado } { $and: [{ nombre: { $regex: criterioNombre, $options: "i" } }] }
+      .find({ $or: [{ nombre: regExpCrit }, { telefono: regExpCrit }] }) // , { estado: estado } { $and: [{ nombre: { $regex: criterioNombre, $options: "i" } }] }
       .populate("sucursal")
       .exec((err: CallbackError, usuariosDB: Array<ClientModelInterface>) => {
         if (err) {
