@@ -13,40 +13,41 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClientClass = void 0;
+const mongoose = require("mongoose");
 const nanoid_1 = require("nanoid");
 const moment_1 = __importDefault(require("moment"));
 // Modelos
 const clientModel_1 = __importDefault(require("../models/clientModel"));
+const server_1 = __importDefault(require("./server"));
 class ClientClass {
     constructor() {
         this.idRef = (0, nanoid_1.nanoid)(10);
         this.token = "";
     }
-    //  Crear un usuario
     nuevoUsuario(req, resp) {
         return __awaiter(this, void 0, void 0, function* () {
             const nombre = req.body.nombre;
-            const apellido = req.body.apellido;
-            const identificacion = req.body.identificacion;
+            const cedula = req.body.cedula;
             const ruc = req.body.ruc;
             const telefono = req.body.telefono;
             const correo = req.body.correo;
-            const fecha_alta = (0, moment_1.default)().format("YYYY-MM-DD");
+            const fecha_alta = (0, moment_1.default)().format("DD-MM-YYYY");
             const observacion = req.body.observacion;
-            const sucursal = req.body.sucursal;
+            const sucursal = new mongoose.Types.ObjectId(req.body.sucursal);
+            const estado = req.body.estado;
             // const client_role: string = req.body.client_role;
             const nuevoUsuario = new clientModel_1.default({
                 idReferencia: this.idRef,
-                idCreador: req.usuario._id,
-                nombre: nombre,
-                apellido: apellido,
-                identificacion: identificacion,
+                idCreador: new mongoose.Types.ObjectId(req.usuario._id),
+                nombre,
+                cedula,
                 ruc: ruc,
-                telefono: telefono,
-                correo: correo,
-                fecha_alta: fecha_alta,
-                observacion: observacion,
-                sucursal: sucursal,
+                telefono,
+                correo,
+                fecha_alta,
+                observacion,
+                sucursal,
+                estado,
                 // client_role: client_role,
             });
             // Insertar usuario en la DB
@@ -59,6 +60,10 @@ class ClientClass {
                     });
                 }
                 else {
+                    const server = server_1.default.instance;
+                    server.io.emit("cargar-clientes", {
+                        ok: true,
+                    });
                     return resp.json({
                         ok: true,
                         mensaje: `Usuario Creado`,
@@ -68,20 +73,19 @@ class ClientClass {
             });
         });
     }
-    // Editar un usuario
     editarUsuario(req, res) {
         const id = req.get("id") || "";
         const estado = req.body.estado;
         // const estado = castEstado(estadoBody);
         const datosNuevos = {
             nombre: req.body.nombre,
-            apellido: req.body.apellido,
-            identificacion: req.body.identificacion,
+            cedula: req.body.cedula,
             ruc: req.body.ruc,
+            correo: req.body.correo,
             telefono: req.body.telefono,
             observacion: req.body.observacion,
-            sucursal: req.body.sucursal,
-            estado: estado,
+            sucursal: new mongoose.Types.ObjectId(req.body.sucursal),
+            estado,
             // client_role: req.get('client_role'),
         };
         clientModel_1.default.findById(id, (err, usuarioDB) => {
@@ -101,14 +105,14 @@ class ClientClass {
             if (!req.body.nombre) {
                 datosNuevos.nombre = usuarioDB.nombre;
             }
-            if (!req.body.apellido) {
-                datosNuevos.apellido = usuarioDB.apellido;
-            }
-            if (!req.body.identificacion) {
-                datosNuevos.identificacion = usuarioDB.identificacion;
+            if (!req.body.cedula) {
+                datosNuevos.cedula = usuarioDB.cedula;
             }
             if (!req.body.ruc) {
                 datosNuevos.ruc = usuarioDB.ruc;
+            }
+            if (!req.body.correo) {
+                datosNuevos.correo = usuarioDB.correo;
             }
             if (!req.body.telefono) {
                 datosNuevos.telefono = usuarioDB.telefono;
@@ -119,13 +123,7 @@ class ClientClass {
             if (!req.body.sucursal) {
                 datosNuevos.sucursal = usuarioDB.sucursal;
             }
-            if (!req.body.estado) {
-                datosNuevos.estado = usuarioDB.estado;
-            }
-            // if (!datosNuevos.client_role) {
-            //     datosNuevos.client_role = usuarioDB.client_role;
-            // }
-            clientModel_1.default.findByIdAndUpdate(id, datosNuevos, { new: true }, (err, usuarioDBActualizado) => {
+            clientModel_1.default.findByIdAndUpdate(id, datosNuevos, { new: true }, (err, usuarioDB) => {
                 if (err) {
                     return res.json({
                         ok: false,
@@ -133,27 +131,31 @@ class ClientClass {
                         err,
                     });
                 }
-                if (!usuarioDBActualizado) {
+                if (!usuarioDB) {
                     return res.json({
                         ok: false,
                         mensaje: `No se encontró un usuario con ese ID en la base de datos`,
                     });
                 }
-                usuarioDBActualizado.password = ";)";
+                const server = server_1.default.instance;
+                server.io.emit("cargar-clientes", {
+                    ok: true,
+                });
+                usuarioDB.password = ";)";
                 return res.json({
                     ok: true,
                     mensaje: `Usuario actualizado`,
-                    usuarioDBActualizado,
+                    usuarioDB,
                 });
             });
         });
     }
-    // Obtener usuario por ID
-    obtenerUsuarioID(req, res) {
-        const id = req.get("id") || "";
+    obtenerCliente(req, res) {
+        const id = new mongoose.Types.ObjectId(req.get("id"));
         clientModel_1.default
             .findById(id)
             .populate("sucursal")
+            .populate("idCreador")
             .exec((err, usuarioDB) => {
             if (err) {
                 return res.json({
@@ -162,222 +164,93 @@ class ClientClass {
                     err,
                 });
             }
-            if (!usuarioDB) {
+            else {
                 return res.json({
-                    ok: false,
-                    mensaje: `No existe el Usuario en la base de datos`,
+                    ok: true,
+                    usuarioDB,
                 });
             }
-            return res.json({
-                ok: true,
-                usuarioDB,
-            });
         });
     }
-    // Obtener usuario por ID Referencia
-    obtenerUsuarioIDRef(req, res) {
-        const idReferencia = req.get("idReferencia");
-        clientModel_1.default
-            .findOne({ idReferencia: idReferencia })
-            .populate("sucursal")
-            .exec((err, usuarioDB) => {
-            if (err) {
-                return res.json({
-                    ok: false,
-                    mensaje: `Error al búscar Usuario o no existe`,
-                    err,
-                });
-            }
-            if (!usuarioDB) {
-                return res.json({
-                    ok: false,
-                    mensaje: `No existe el Usuario en la base de datos`,
-                });
-            }
-            return res.json({
-                ok: true,
-                usuarioDB,
-            });
-        });
-    }
-    // Obtener usuario por Teléfono
-    obtenerUsuarioTel(req, res) {
-        const telefono = req.get("telefono");
-        const estado = req.get("estado");
-        // const estado = castEstado(estadoHeader);
-        clientModel_1.default
-            .find({ $and: [{ telefono: { $regex: telefono, $options: "i" } }] }) // , { estado: estado }
-            .populate("sucursal")
-            .exec((err, usuariosDB) => {
-            if (err) {
-                return res.json({
-                    ok: false,
-                    mensaje: `Error al búscar Usuario o no existe`,
-                    err,
-                });
-            }
-            // if (!usuariosDB) {
-            //     return res.json({
-            //         ok: false,
-            //         mensaje: `No existe el Usuario en la base de datos`
-            //     });
-            // }
-            return res.json({
-                ok: true,
-                usuariosDB,
-            });
-        });
-    }
-    // Obtener usuarios por role
-    obtenerUsuariosRole(req, res) {
-        const role = req.get("client_role");
-        const estado = req.get("estado");
-        // const estado = castEstado(estadoHeader);
-        clientModel_1.default
-            .find({ $and: [{ client_role: role }, { estado: estado }] })
-            .populate("sucursal")
-            .exec((err, usuariosDB) => {
-            if (err) {
-                return res.json({
-                    ok: false,
-                    mensaje: `Error interno`,
-                    err,
-                });
-            }
-            if (!usuariosDB || usuariosDB.length === 0) {
-                return res.json({
-                    ok: false,
-                    mensaje: `No existen usuarios con ese criterio de búsqueda`,
-                    usuariosDB,
-                });
-            }
-            return res.json({
-                ok: true,
-                usuariosDB,
-            });
-        });
-    }
-    // Obtener usuarios por criterio nombre
-    obtenerUsuarioCriterioNombre(req, res) {
-        // const criterioNombre = req.body.criterioNombre;
-        // const estado: boolean = req.get("estado");
-        const criterioNombre = req.get("criterio");
-        const regExpCrit = RegExp(criterioNombre, "i");
-        // const estado = castEstado(estadoHeader);
-        // /^[a-zA-ZáéíóúÁÉÍÓU]+$/
-        clientModel_1.default
-            .find({ $or: [{ nombre: regExpCrit }, { telefono: regExpCrit }] }) // , { estado: estado } { $and: [{ nombre: { $regex: criterioNombre, $options: "i" } }] }
-            .populate("sucursal")
-            .exec((err, usuariosDB) => {
-            if (err) {
-                return res.json({
-                    ok: false,
-                    mensaje: `Error interno`,
-                    err,
-                });
-            }
-            // if (!usuariosDB || usuariosDB.length === 0) {
-            //     return res.json({
-            //         ok: false,
-            //         mensaje: `No existen usuarios con ese criterio de búsqueda`,
-            //         usuariosDB
-            //     })
-            // }
-            return res.json({
-                ok: true,
-                usuariosDB,
-            });
-        });
-    }
-    // Obtener usuarios por sucursal
-    obtenerUsuariosSucursal(req, res) {
-        const sucursal = req.get("sucursal");
-        const estado = req.get("estado");
-        // const estado = castEstado(estadoHeader);
-        clientModel_1.default
-            .find({ $and: [{ sucursal: sucursal }, { estado: estado }] })
-            .populate("sucursal")
-            .exec((err, usuariosDB) => {
-            if (err) {
-                return res.json({
-                    ok: false,
-                    mensaje: `Error interno`,
-                    err,
-                });
-            }
-            if (!usuariosDB || usuariosDB.length === 0) {
-                return res.json({
-                    ok: false,
-                    mensaje: `No existen usuarios con ese criterio de búsqueda`,
-                    usuariosDB,
-                });
-            }
-            return res.json({
-                ok: true,
-                usuariosDB,
-            });
-        });
-    }
-    // Obtener usuario por sucursal
-    obtenerUsuarioSucursal(req, res) {
-        const sucursal = req.get("sucursal");
-        const idUsuario = req.get("idUsuario");
-        clientModel_1.default
-            .find({ sucursal: sucursal, _id: idUsuario })
-            .populate("sucursal")
-            .exec((err, usuariosDB) => {
-            if (err) {
-                return res.json({
-                    ok: false,
-                    mensaje: `Error interno`,
-                    err,
-                });
-            }
-            if (!usuariosDB) {
-                return res.json({
-                    ok: false,
-                    mensaje: `No existen usuarios con ese criterio de búsqueda`,
-                    usuariosDB,
-                });
-            }
-            return res.json({
-                ok: true,
-                usuariosDB,
-            });
-        });
-    }
-    // Obtener todos los usuarios
     obtenerTodosUsuarios(req, res) {
-        const id = req.usuario._id;
-        const estado = req.get("estado");
-        // const estado = castEstado(estadoHeader);
-        clientModel_1.default.find({}, (err, usuariosDB) => {
-            // estado: estado
-            if (err) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // const id = req.usuario._id;
+            const resp = yield clientModel_1.default.aggregate([
+                {
+                    $lookup: {
+                        from: "userworkers",
+                        localField: "idCreador",
+                        foreignField: "_id",
+                        as: "creador",
+                    },
+                },
+                {
+                    $lookup: {
+                        from: "sucursales",
+                        localField: "sucursal",
+                        foreignField: "_id",
+                        as: "sucursal",
+                    },
+                },
+            ]);
+            if (resp) {
                 return res.json({
-                    ok: false,
-                    mensaje: `Error Interno`,
-                    err,
+                    ok: true,
+                    mensaje: "Usuarios encontrados",
+                    usuariosDB: resp,
                 });
             }
-            if (!usuariosDB) {
+            else {
                 return res.json({
                     ok: false,
-                    mensaje: `No se encontraron Usuarios en la Base de datos`,
+                    mensaje: "Error al obtener los clientes",
+                    error: resp,
                 });
             }
-            return res.json({
-                ok: true,
-                mensaje: `Usuarios encontrados`,
-                usuariosDB,
-                cantUsuarios: usuariosDB.length,
+            return;
+            clientModel_1.default.find({}, (err, usuariosDB) => {
+                // estado: estado
+                if (err) {
+                    return res.json({
+                        ok: false,
+                        mensaje: `Error Interno`,
+                        err,
+                    });
+                }
+                return res.json({
+                    ok: true,
+                    mensaje: `Usuarios encontrados`,
+                    usuariosDB,
+                    cantUsuarios: usuariosDB.length,
+                });
             });
         });
     }
-    // Eliminar un usuario
+    obtenerPorBusqueda(req, resp) {
+        const criterio = new RegExp(req.get("criterio"), "i");
+        clientModel_1.default
+            .find({ $or: [{ telefono: criterio }, { nombre: criterio }] })
+            .populate("sucursal")
+            .populate("idCreador")
+            .exec((err, usuariosDB) => {
+            if (err) {
+                return resp.json({
+                    ok: false,
+                    mensaje: "Error al buscar clientes",
+                    err,
+                });
+            }
+            else {
+                return resp.json({
+                    ok: true,
+                    usuariosDB,
+                });
+            }
+        });
+    }
     eliminarUsuario(req, res) {
         const id = req.get("id") || "";
-        clientModel_1.default.findByIdAndDelete(id, {}, (err, usuarioEliminadoDB) => {
+        clientModel_1.default.findByIdAndDelete(id, {}, (err, usuarioDB) => {
             if (err) {
                 return res.json({
                     ok: false,
@@ -385,16 +258,20 @@ class ClientClass {
                     err,
                 });
             }
-            if (!usuarioEliminadoDB) {
+            if (!usuarioDB) {
                 return res.json({
                     ok: false,
                     mensaje: `No se encontró Usuario con este ID`,
                 });
             }
+            const server = server_1.default.instance;
+            server.io.emit("cargar-clientes", {
+                ok: true,
+            });
             return res.json({
                 ok: true,
                 mensaje: `Usuario eliminado`,
-                usuarioEliminadoDB,
+                usuarioDB,
             });
         });
     }
