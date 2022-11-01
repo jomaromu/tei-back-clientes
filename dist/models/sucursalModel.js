@@ -6,20 +6,20 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const mongoose_unique_validator_1 = __importDefault(require("mongoose-unique-validator"));
 // crear esquema
 const Schema = mongoose_1.default.Schema;
-const ubicacionSchema = new Schema({
-    pais: { type: String, required: [true, 'El País es necesario'], default: 'Panamá' },
-    ciudad: { type: String, required: [true, 'La Ciudad es necesaria'], default: 'Panamá' },
-    direccion: { type: String, required: false },
+const Provincia = new Schema({
+    id: { type: String },
+    name: { type: String },
 });
 const sucursalSchema = new Schema({
-    idCreador: { type: Schema.Types.ObjectId, ref: 'userWorker' },
-    idReferencia: { type: String, required: [true, `Es necesario un ID referencia`], unique: true },
-    nombre: { type: String, required: [true, 'El nombre es necesario'], unique: true },
-    telefono: { type: String, required: false, default: '222222' },
-    ubicacion: { type: ubicacionSchema },
+    idCreador: { type: Schema.Types.ObjectId, ref: "userWorker" },
+    nombre: { type: String, unique: true },
+    direccion: { type: String },
+    telefono: { type: String },
+    provincia: { type: Provincia },
     fecha_creacion: { type: String },
-    estado: { type: Boolean, required: false, default: true }
+    estado: { type: Boolean, default: true },
+    foranea: { type: mongoose_1.default.Types.ObjectId, ref: "userWorker" },
 });
 // validacion para único elemento
-sucursalSchema.plugin(mongoose_unique_validator_1.default, { message: 'El {PATH}, ya existe!!' });
-module.exports = mongoose_1.default.model('sucursales', sucursalSchema);
+sucursalSchema.plugin(mongoose_unique_validator_1.default, { message: "El {PATH}, ya existe!!" });
+module.exports = mongoose_1.default.model("sucursales", sucursalSchema);

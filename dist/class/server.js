@@ -16,8 +16,8 @@ class Server {
         this.io = new socket_io_1.default.Server(this.httpServer, {
             cors: {
                 origin: true,
-                credentials: true
-            }
+                credentials: true,
+            },
         });
         this.escucharConexiones();
     }
@@ -25,9 +25,12 @@ class Server {
         return this._instance || (this._instance = new this());
     }
     escucharConexiones() {
-        console.log('Escuchando conexiones');
-        this.io.on('connection', () => {
-            console.log(`Cliente conectado`);
+        console.log("Escuchando conexiones");
+        this.io.on("connection", (cliente) => {
+            cliente.on("room", (room) => {
+                cliente.join(room);
+                console.log(`Cliente conectado al room: ${room}`);
+            });
         });
     }
     // levantar el servidor

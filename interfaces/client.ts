@@ -11,4 +11,5 @@ export interface ClientModelInterface {
   observacion: string;
   estado: boolean;
   sucursal: string;
+  foranea: string;
 }

@@ -15,7 +15,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClientClass = void 0;
 const mongoose = require("mongoose");
 const nanoid_1 = require("nanoid");
-const moment_1 = __importDefault(require("moment"));
+// import moment from "moment";
+const moment_timezone_1 = __importDefault(require("moment-timezone"));
 // Modelos
 const clientModel_1 = __importDefault(require("../models/clientModel"));
 const server_1 = __importDefault(require("./server"));
@@ -26,19 +27,24 @@ class ClientClass {
     }
     nuevoUsuario(req, resp) {
         return __awaiter(this, void 0, void 0, function* () {
+            const idCreador = new mongoose.Types.ObjectId(req.usuario._id);
             const nombre = req.body.nombre;
             const cedula = req.body.cedula;
             const ruc = req.body.ruc;
             const telefono = req.body.telefono;
             const correo = req.body.correo;
-            const fecha_alta = (0, moment_1.default)().format("DD-MM-YYYY");
+            const fecha_alta = (0, moment_timezone_1.default)()
+                .tz("America/Bogota")
+                .format("DD/MM/YYYY");
             const observacion = req.body.observacion;
             const sucursal = new mongoose.Types.ObjectId(req.body.sucursal);
             const estado = req.body.estado;
+            const foranea = new mongoose.Types.ObjectId(req.body.foranea);
             // const client_role: string = req.body.client_role;
             const nuevoUsuario = new clientModel_1.default({
                 idReferencia: this.idRef,
-                idCreador: new mongoose.Types.ObjectId(req.usuario._id),
+                idCreador,
+                foranea,
                 nombre,
                 cedula,
                 ruc: ruc,
@@ -51,7 +57,7 @@ class ClientClass {
                 // client_role: client_role,
             });
             // Insertar usuario en la DB
-            nuevoUsuario.save((err, usuarioDB) => {
+            nuevoUsuario.save((err) => {
                 if (err) {
                     return resp.json({
                         ok: false,
@@ -67,14 +73,14 @@ class ClientClass {
                     return resp.json({
                         ok: true,
                         mensaje: `Usuario Creado`,
-                        usuarioDB,
                     });
                 }
             });
         });
     }
     editarUsuario(req, res) {
-        const id = req.get("id") || "";
+        const _id = new mongoose.Types.ObjectId(req.get("id"));
+        const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
         const estado = req.body.estado;
         // const estado = castEstado(estadoBody);
         const datosNuevos = {
@@ -86,9 +92,8 @@ class ClientClass {
             observacion: req.body.observacion,
             sucursal: new mongoose.Types.ObjectId(req.body.sucursal),
             estado,
-            // client_role: req.get('client_role'),
         };
-        clientModel_1.default.findById(id, (err, usuarioDB) => {
+        clientModel_1.default.findOne({ _id, foranea }, (err, usuarioDB) => {
             if (err) {
                 return res.json({
                     ok: false,
@@ -123,7 +128,7 @@ class ClientClass {
             if (!req.body.sucursal) {
                 datosNuevos.sucursal = usuarioDB.sucursal;
             }
-            clientModel_1.default.findByIdAndUpdate(id, datosNuevos, { new: true }, (err, usuarioDB) => {
+            clientModel_1.default.findOneAndUpdate({ _id, foranea }, datosNuevos, { new: true }, (err, usuarioDB) => {
                 if (err) {
                     return res.json({
                         ok: false,
@@ -138,9 +143,10 @@ class ClientClass {
                     });
                 }
                 const server = server_1.default.instance;
-                server.io.emit("cargar-clientes", {
-                    ok: true,
-                });
+                // server.io.emit("cargar-clientes", {
+                //   ok: true,
+                // });
+                server.io.emit("cargar-pedido", { ok: true });
                 usuarioDB.password = ";)";
                 return res.json({
                     ok: true,
@@ -151,9 +157,10 @@ class ClientClass {
         });
     }
     obtenerCliente(req, res) {
-        const id = new mongoose.Types.ObjectId(req.get("id"));
+        const _id = new mongoose.Types.ObjectId(req.get("id"));
+        const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
         clientModel_1.default
-            .findById(id)
+            .findOne({ _id, foranea })
             .populate("sucursal")
             .populate("idCreador")
             .exec((err, usuarioDB) => {
@@ -175,7 +182,11 @@ class ClientClass {
     obtenerTodosUsuarios(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             // const id = req.usuario._id;
+            const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
             const resp = yield clientModel_1.default.aggregate([
+                {
+                    $match: { foranea },
+                },
                 {
                     $lookup: {
                         from: "userworkers",
@@ -207,29 +218,18 @@ class ClientClass {
                     error: resp,
                 });
             }
-            return;
-            clientModel_1.default.find({}, (err, usuariosDB) => {
-                // estado: estado
-                if (err) {
-                    return res.json({
-                        ok: false,
-                        mensaje: `Error Interno`,
-                        err,
-                    });
-                }
-                return res.json({
-                    ok: true,
-                    mensaje: `Usuarios encontrados`,
-                    usuariosDB,
-                    cantUsuarios: usuariosDB.length,
-                });
-            });
         });
     }
     obtenerPorBusqueda(req, resp) {
         const criterio = new RegExp(req.get("criterio"), "i");
+        const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
         clientModel_1.default
-            .find({ $or: [{ telefono: criterio }, { nombre: criterio }] })
+            .find({
+            $and: [
+                { $or: [{ telefono: criterio }, { nombre: criterio }] },
+                { foranea },
+            ],
+        })
             .populate("sucursal")
             .populate("idCreador")
             .exec((err, usuariosDB) => {
@@ -249,8 +249,9 @@ class ClientClass {
         });
     }
     eliminarUsuario(req, res) {
-        const id = req.get("id") || "";
-        clientModel_1.default.findByIdAndDelete(id, {}, (err, usuarioDB) => {
+        const _id = new mongoose.Types.ObjectId(req.get("id"));
+        const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
+        clientModel_1.default.findOneAndDelete({ _id, foranea }, {}, (err, usuarioDB) => {
             if (err) {
                 return res.json({
                     ok: false,

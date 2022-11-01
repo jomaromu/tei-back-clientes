@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { CallbackError } from "mongoose";
+import { Error } from "mongoose";
 import jwt from "jsonwebtoken";
 const SEED = require("../environment/environment");
 

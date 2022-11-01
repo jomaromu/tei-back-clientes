@@ -1,8 +1,9 @@
 import { Response, Request } from "express";
-import { CallbackError } from "mongoose";
+import { Error } from "mongoose";
 const mongoose = require("mongoose");
 import { nanoid } from "nanoid";
-import moment from "moment";
+// import moment from "moment";
+import moment from "moment-timezone";
 
 // Interfaces
 import { ClientModelInterface } from "../interfaces/client";
@@ -22,20 +23,25 @@ export class ClientClass {
   }
 
   async nuevoUsuario(req: any, resp: Response): Promise<any> {
+    const idCreador = new mongoose.Types.ObjectId(req.usuario._id);
     const nombre: string = req.body.nombre;
     const cedula: string = req.body.cedula;
     const ruc: string = req.body.ruc;
     const telefono: string = req.body.telefono;
     const correo: string = req.body.correo;
-    const fecha_alta: string = moment().format("DD-MM-YYYY");
+    const fecha_alta: string = moment()
+      .tz("America/Bogota")
+      .format("DD/MM/YYYY");
     const observacion: string = req.body.observacion;
     const sucursal = new mongoose.Types.ObjectId(req.body.sucursal);
     const estado: boolean = req.body.estado;
+    const foranea = new mongoose.Types.ObjectId(req.body.foranea);
     // const client_role: string = req.body.client_role;
 
     const nuevoUsuario = new clientModel({
       idReferencia: this.idRef,
-      idCreador: new mongoose.Types.ObjectId(req.usuario._id),
+      idCreador,
+      foranea,
       nombre,
       cedula,
       ruc: ruc,
@@ -49,7 +55,7 @@ export class ClientClass {
     });
 
     // Insertar usuario en la DB
-    nuevoUsuario.save((err: CallbackError, usuarioDB: ClientModelInterface) => {
+    nuevoUsuario.save((err: any) => {
       if (err) {
         return resp.json({
           ok: false,
@@ -64,14 +70,14 @@ export class ClientClass {
         return resp.json({
           ok: true,
           mensaje: `Usuario Creado`,
-          usuarioDB,
         });
       }
     });
   }
 
   editarUsuario(req: any, res: Response): void {
-    const id = req.get("id") || "";
+    const _id = new mongoose.Types.ObjectId(req.get("id"));
+    const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
     const estado: boolean = req.body.estado;
 
     // const estado = castEstado(estadoBody);
@@ -85,12 +91,11 @@ export class ClientClass {
       observacion: req.body.observacion,
       sucursal: new mongoose.Types.ObjectId(req.body.sucursal),
       estado,
-      // client_role: req.get('client_role'),
     };
 
-    clientModel.findById(
-      id,
-      (err: CallbackError, usuarioDB: ClientModelInterface) => {
+    clientModel.findOne(
+      { _id, foranea },
+      (err: any, usuarioDB: ClientModelInterface) => {
         if (err) {
           return res.json({
             ok: false,
@@ -129,11 +134,11 @@ export class ClientClass {
           datosNuevos.sucursal = usuarioDB.sucursal;
         }
 
-        clientModel.findByIdAndUpdate(
-          id,
+        clientModel.findOneAndUpdate(
+          { _id, foranea },
           datosNuevos,
           { new: true },
-          (err: CallbackError, usuarioDB: any) => {
+          (err: any, usuarioDB: any) => {
             if (err) {
               return res.json({
                 ok: false,
@@ -150,9 +155,10 @@ export class ClientClass {
             }
 
             const server = Server.instance;
-            server.io.emit("cargar-clientes", {
-              ok: true,
-            });
+            // server.io.emit("cargar-clientes", {
+            //   ok: true,
+            // });
+            server.io.emit("cargar-pedido", { ok: true });
 
             usuarioDB.password = ";)";
 
@@ -168,13 +174,14 @@ export class ClientClass {
   }
 
   obtenerCliente(req: Request, res: Response): void {
-    const id = new mongoose.Types.ObjectId(req.get("id"));
+    const _id = new mongoose.Types.ObjectId(req.get("id"));
+    const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
 
     clientModel
-      .findById(id)
+      .findOne({ _id, foranea })
       .populate("sucursal")
       .populate("idCreador")
-      .exec((err: CallbackError, usuarioDB: any) => {
+      .exec((err: any, usuarioDB: any) => {
         if (err) {
           return res.json({
             ok: false,
@@ -192,8 +199,12 @@ export class ClientClass {
 
   async obtenerTodosUsuarios(req: any, res: Response): Promise<any> {
     // const id = req.usuario._id;
+    const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
 
     const resp = await clientModel.aggregate([
+      {
+        $match: { foranea },
+      },
       {
         $lookup: {
           from: "userworkers",
@@ -226,37 +237,19 @@ export class ClientClass {
         error: resp,
       });
     }
-
-    return;
-
-    clientModel.find(
-      {},
-      (err: CallbackError, usuariosDB: Array<ClientModelInterface>) => {
-        // estado: estado
-
-        if (err) {
-          return res.json({
-            ok: false,
-            mensaje: `Error Interno`,
-            err,
-          });
-        }
-
-        return res.json({
-          ok: true,
-          mensaje: `Usuarios encontrados`,
-          usuariosDB,
-          cantUsuarios: usuariosDB.length,
-        });
-      }
-    );
   }
 
   obtenerPorBusqueda(req: any, resp: Response): void {
     const criterio = new RegExp(req.get("criterio"), "i");
+    const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
 
     clientModel
-      .find({ $or: [{ telefono: criterio }, { nombre: criterio }] })
+      .find({
+        $and: [
+          { $or: [{ telefono: criterio }, { nombre: criterio }] },
+          { foranea },
+        ],
+      })
       .populate("sucursal")
       .populate("idCreador")
       .exec((err: any, usuariosDB: Array<any>) => {
@@ -276,12 +269,13 @@ export class ClientClass {
   }
 
   eliminarUsuario(req: Request, res: Response): void {
-    const id = req.get("id") || "";
+    const _id = new mongoose.Types.ObjectId(req.get("id"));
+    const foranea = new mongoose.Types.ObjectId(req.get("foranea"));
 
-    clientModel.findByIdAndDelete(
-      id,
+    clientModel.findOneAndDelete(
+      { _id, foranea },
       {},
-      (err: CallbackError, usuarioDB: any) => {
+      (err: any, usuarioDB: any) => {
         if (err) {
           return res.json({
             ok: false,
